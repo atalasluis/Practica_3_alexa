@@ -19,6 +19,25 @@
 ## 2. Diseño del Sistema
 * Diagrama de bloques
   El sistema se divide lógicamente en tres módulos: Adquisición de datos (sensores), Procesamiento/Control (SoC ESP32) y Actuación (Indicadores visuales locales).
+  ```mermaid
+  graph LR
+    subgraph Adquisición de Datos
+        S[Sensor Ultrasónico]
+    end
+    
+    subgraph Procesamiento y Control
+        ESP[SoC ESP32]
+    end
+    
+    subgraph Actuación Local
+        L[Indicadores LED]
+        D[Display LCD 16x2]
+    end
+    
+    S -->|Señal Echo/Trigger| ESP
+    ESP -->|Control GPIO| L
+    ESP -->|I2C| D
+  ```
 * Diagrama de circuito
   
   ![Diagrama de circuito](/media/diagramaS.png)
@@ -28,9 +47,97 @@
   - Edge: Dispositivo inteligente suscrito a los tópicos MQTT de AWS IoT Core.
   - Cloud Middleware & Database: AWS IoT Core actuando como Message Broker y gestor de estado (Shadow). Amazon DynamoDB almacenando la relación 1:1 entre cuentas de Amazon y dispositivos físicos.
   - Voice & Backend: Alexa Skills Kit (Frontend) invocando a AWS Lambda (Backend en Python), el cual orquesta la lógica de negocio consumiendo las APIs de DynamoDB e IoT Data.
+  ```mermaid
+  graph TD
+    subgraph Voice & Backend
+        A[Alexa Skills Kit\nFrontend de Voz]
+        L[AWS Lambda\nBackend Python]
+    end
+    
+    subgraph Cloud Middleware & Database
+        IoT[AWS IoT Core\nMessage Broker & Shadow]
+        DB[(Amazon DynamoDB\nuser_thing)]
+    end
+    
+    subgraph Edge
+        ESP[Objeto Inteligente\nESP32]
+    end
+
+    A -- "JSON Payload (Intent + user_id)" --> L
+    L -- "Query: user_id" --> DB
+    DB -. "Result: thing_name" .-> L
+    L -- "REST API: Update/Get Shadow" --> IoT
+    IoT -- "MQTT sobre TLS (Puerto 8883)" <--> ESP
+  ```
 * Diagramas estructurales y de comportamiento
   Diseño Estructural: El firmware se abstrae en clases independientes (AWSManager, WiFiManager, UltrasonicSensor, LedManager, DisplayManager) inyectadas en el flujo principal, evitando el acoplamiento y facilitando pruebas unitarias.
+```mermaid
+classDiagram
+    class Main {
+        +setup()
+        +loop()
+    }
+    class WiFiManager {
+        -const char* ssid
+        -const char* password
+        +init()
+        +connect()
+        +checkConnection()
+    }
+    class AWSManager {
+        -WiFiClientSecure net
+        -PubSubClient client
+        +init()
+        +connect()
+        +publishState(distancia, led)
+        +callback(topic, payload)
+    }
+    class UltrasonicSensor {
+        -int triggerPin
+        -int echoPin
+        +init()
+        +getDistance() int
+    }
+    class LedManager {
+        -int pinGreen
+        -int pinRed
+        +init()
+        +setColor(color)
+        +turnOff()
+    }
+    class DisplayManager {
+        +init()
+        +updateData(distancia, status)
+    }
+
+    Main --> WiFiManager : Inyección de dependencia
+    Main --> AWSManager : Inyección de dependencia
+    Main --> UltrasonicSensor : Adquisición
+    Main --> LedManager : Control
+    Main --> DisplayManager : Interfaz
+ ```
   Comportamiento (Flujo de Comando): El usuario emite un Utterance -> Alexa resuelve el Intent -> Lambda consulta user_thing en DynamoDB -> Lambda envía carga útil JSON al tópico /shadow/update -> IoT Core notifica al ESP32 en /shadow/update/delta -> ESP32 actúa e informa el nuevo estado a /shadow/update (reported).
+  ```mermaid
+sequenceDiagram
+    actor U as Usuario
+    participant A as Alexa (Frontend)
+    participant L as AWS Lambda (Backend)
+    participant DB as DynamoDB
+    participant IoT as AWS IoT Core (Shadow)
+    participant E as ESP32 (Edge)
+
+    U->>A: "Alexa, enciende la luz" (Utterance)
+    A->>L: Trigger de evento (TurnOnIntent, user_id)
+    L->>DB: get_item(Key: user_id)
+    DB-->>L: Retorna 'thing_name'
+    L->>IoT: update_thing_shadow(desired: led="on")
+    IoT-->>E: Publicación MQTT (/shadow/update/delta)
+    E->>E: Procesa payload JSON y activa GPIO
+    E->>IoT: Publicación MQTT (/shadow/update) [reported: led="on"]
+    IoT-->>L: HTTP 200 OK
+    L-->>A: JSON Response (speak_output)
+    A->>U: Respuesta de voz: "Comando enviado"
+  ```
 * Diseño de la skill de Alexa
   - Invocation Name: practica 3
   - Modelo de Interacción (Intents):
