@@ -16,8 +16,10 @@ const int publishInterval = 5000; // 5 segundos
 const char* ssid = "Redmi 10 2022";
 const char* password = "ulnt0462";
 
+String serie = "15";
+
 // ==== AWS ====
-const char* endpoint = "a22gvicr7s9bow-ats.iot.us-east-1.amazonaws.com";
+const char* endpoint = "a3pyx84p269dfq-ats.iot.us-east-1.amazonaws.com";
 AWSManager aws(endpoint, "thing_test");
 
 // ==== OBJETOS ====

@@ -62,6 +62,7 @@ void AWSManager::publishState(long distancia, String led) {
 
     doc["state"]["reported"]["distancia"] = distancia;
     doc["state"]["reported"]["led"] = led;
+    //doc["state"]["reported"]["serie"] = serie;
 
     char buffer[256];
     serializeJson(doc, buffer);

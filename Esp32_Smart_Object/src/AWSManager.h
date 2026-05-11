@@ -41,7 +41,7 @@ Device Shadow state
 Device Shadow metadata
 {
   "metadata": {
-    "desired": {
+    "desired": { 
       "led": {
         "timestamp": 1777871239
       }
